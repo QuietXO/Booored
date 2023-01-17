@@ -7,6 +7,7 @@ import torch.nn as nn
 
 
 # TODO: if accuracy under certain percentage repeat training until hit, if falls too low STOP
+# TODO: add learning curve (TensorBoard)
 def train_model(model, data_loader, criterion, optimizer, n_epochs, device=torch.device('cpu'),
                 print_steps=1, print_epochs=1, loss_acc=4):
     """

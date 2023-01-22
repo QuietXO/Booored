@@ -12,7 +12,7 @@ from torch.utils.data import Dataset, DataLoader
 
 
 def create_csv(file_path, csv_path=None, train_csv=None, test_csv=None,
-               rewrite=False, split=False, test_ratio=0.2, mul=1, mul_test=False):
+               rewrite=False, split=False, test_ratio=0.2, mul=1, mul_test=True):
     """
     Create a csv file for your dataset
     :param file_path: Sub-Folders location path (e.g. './dataset')
@@ -23,7 +23,7 @@ def create_csv(file_path, csv_path=None, train_csv=None, test_csv=None,
     :param split: Do you want to split the dataset into training and testing data? (False by default)
     :param test_ratio: If split is True, how much of the dataset should be used for testing? (0.2 = 20% by default)
     :param mul: Multiply the data is your dataset (No multiplication by default)
-    :param mul_test: If split is True, do you want to multiply the test dataset as well? (False by default)
+    :param mul_test: If split is True, do you want to multiply the test dataset as well? (True by default)
     :return: dictionary of indexing the classes (index : class)
     """
 
@@ -153,6 +153,7 @@ def trans_normal(img_h, img_w, mean, std, grayscale=True):
             torchvision.transforms.Resize((img_h, img_w)),
             torchvision.transforms.RandomHorizontalFlip(),
             torchvision.transforms.RandomVerticalFlip(),
+            torchvision.transforms.RandomRotation(45),
             torchvision.transforms.Grayscale(),
             torchvision.transforms.Normalize(mean, std)
         ])
@@ -162,6 +163,7 @@ def trans_normal(img_h, img_w, mean, std, grayscale=True):
             torchvision.transforms.Resize((img_h, img_w)),
             torchvision.transforms.RandomHorizontalFlip(),
             torchvision.transforms.RandomVerticalFlip(),
+            torchvision.transforms.RandomRotation(45),
             torchvision.transforms.Normalize(mean, std)
         ])
 

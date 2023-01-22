@@ -1,12 +1,12 @@
 # Import libraries
 from . import visual
+from math import ceil
 
 # Torch libraries
 import torch
 import torch.nn as nn
 
 
-# TODO: if accuracy under certain percentage repeat training until hit, if falls too low STOP
 # TODO: add learning curve (TensorBoard)
 def train_model(model, data_loader, criterion, optimizer, n_epochs, device=torch.device('cpu'),
                 print_steps=1, print_epochs=1, loss_acc=4):
@@ -21,9 +21,10 @@ def train_model(model, data_loader, criterion, optimizer, n_epochs, device=torch
     :param print_steps: Number of printed steps per epoch (one per epoch by default)
     :param print_epochs: Print every n-th epoch (every epoch by default)
     :param loss_acc: Accuracy of the printed loss (4 decimal by default)
-    :return: None
+    :return: Loss
     """
 
+    print('--- Training Started ---', end='')
     # Variables for epoch print
     print_epochs = (n_epochs if print_epochs is None else print_epochs)
     n_total_steps = len(data_loader)
@@ -31,6 +32,8 @@ def train_model(model, data_loader, criterion, optimizer, n_epochs, device=torch
 
     model.to(device)
     for epoch in range(n_epochs):
+        mean_loss = 0
+        loss_counter = 0
         for i, (images, labels) in enumerate(data_loader):
             images = images.to(device)
             labels = labels.to(device)
@@ -39,6 +42,7 @@ def train_model(model, data_loader, criterion, optimizer, n_epochs, device=torch
             outputs = model(images)
             loss = criterion(outputs, labels)
             mean_loss += loss.item()
+            loss_counter += 1
 
             # Backward & optimize
             optimizer.zero_grad()
@@ -47,11 +51,11 @@ def train_model(model, data_loader, criterion, optimizer, n_epochs, device=torch
 
             if epoch % print_epochs == 0:
                 if (i+1) % int(n_total_steps / print_steps) == 0:
-                    print(f'Epoch {epoch + 1} / {n_epochs} | Step {i+1} / {n_total_steps} | '
-                          f'Loss: {(mean_loss/2000):.{loss_acc}f}')
-                    mean_loss = 0
+                    print(f'\nEpoch {epoch + 1} / {n_epochs} | Step {i+1} / {n_total_steps} | '
+                          f'Loss: {(mean_loss/loss_counter):.{loss_acc}f}', end='')
+    print('\n--- Training Finished ---')
 
-    print('--- Training Finished ---')
+    return mean_loss/n_total_steps
 
 
 def load_model(model, data_loader, classification, device=torch.device('cpu'), save_path=None,
@@ -126,22 +130,80 @@ def save_model(model, save_path):
     torch.save(model.state_dict(), save_path)
 
 
-# TODO: Take care of padding so you can input IMG_SIZE as well
+def conv_out(size, padding, kernel, stride):
+    return int((size + 2*padding - kernel)/stride) + 1
+
+
 class ConvNet(nn.Module):
-    def __init__(self, colour_size, n_categories):
+    def __init__(self, img_h, img_w, n_classes, colour_size=1):
         super(ConvNet, self).__init__()
-        self.conv1 = nn.Conv2d(colour_size, 6, 4)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 4)
-        self.fc1 = nn.Linear(16 * 19 * 19, 120)
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, n_categories)
+        # Variables
+        self.img_h = img_h
+        self.img_w = img_w
+        self.last_out = 0
+
+        # Convolution
+        self.conv1 = self.convolution(colour_size, 16)
+        self.maxPool3 = self.pooling(3, 3)
+        self.conv2 = self.convolution(self.last_out, 32)
+        self.maxPool2 = self.pooling()
+
+        # Functions
+        self.flattened = self.img_h * self.img_w * self.last_out
+        self.fc1 = nn.Linear(self.flattened, 128)
+        self.fc2 = nn.Linear(128, 64)
+        self.fc3 = nn.Linear(64, 32)
+        self.fc4 = nn.Linear(32, n_classes)
 
     def forward(self, x):
-        x = self.pool(torch.nn.functional.relu(self.conv1(x)))
-        x = self.pool(torch.nn.functional.relu(self.conv2(x)))
-        x = x.view(-1, 16 * 19 * 19)
+        x = self.maxPool3(torch.nn.functional.relu(self.conv1(x)))
+        x = self.maxPool2(torch.nn.functional.relu(self.conv2(x)))
+        x = x.view(-1, self.flattened)
         x = torch.nn.functional.relu(self.fc1(x))
         x = torch.nn.functional.relu(self.fc2(x))
-        x = self.fc3(x)
+        x = torch.nn.functional.relu(self.fc3(x))
+        x = self.fc4(x)
         return x
+
+    def convolution(self, in_size, out_size, kernel=5, stride=1, padding=-1):
+        """
+        Convolution function
+        :param in_size: input size
+        :param out_size: output size
+        :param kernel: kernel size (5 by default)
+        :param stride: stride step (1 by default)
+        :param padding: padding (-1 automatically calculates the padding so the image is not changed)
+        :return: Tensor
+        """
+
+        self.last_out = out_size
+
+        if padding == -1:
+            self.img_h = ceil(self.img_h/stride)
+            self.img_w = ceil(self.img_w/stride)
+            return nn.Conv2d(in_size, out_size, kernel, padding=(int(kernel/2)))
+        else:
+            self.img_h = int((self.img_h + 2*padding - kernel)/stride) + 1
+            self.img_w = int((self.img_w + 2*padding - kernel)/stride) + 1
+            return nn.Conv2d(in_size, out_size, kernel, padding=padding)
+
+    def pooling(self, kernel=2, stride=2, pool_type='max'):
+        """
+        Preform pooling
+        :param kernel: size of the pool
+        :param stride: stride step
+        :param pool_type: max, avg, lp
+        :return: Tensor
+        """
+
+        self.img_h = int(self.img_h/stride)
+        self.img_w = int(self.img_w/stride)
+
+        if pool_type == 'max':
+            return nn.MaxPool2d(kernel, stride)
+        elif pool_type == 'avg':
+            return nn.AvgPool2d(kernel, stride)
+        elif pool_type == 'lp':
+            return nn.LPPool2d(kernel, stride)
+        else:
+            return TypeError("Unknown Type")

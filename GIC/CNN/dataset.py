@@ -86,7 +86,8 @@ def create_csv(file_path, csv_path=None, train_csv=None, test_csv=None,
     return translate
 
 
-def get_normal(file_path, img_h, img_w, colour_size=1, grayscale=True, batch_size=5000):
+def get_normal(file_path, img_h, img_w, colour_size=1, grayscale=True,batch_size=5000,
+               normal_path=None, rewrite=False):
     """
     Get the mean & std for you image dataset
     :param file_path: Sub-Folders location path (e.g. './dataset')
@@ -95,8 +96,21 @@ def get_normal(file_path, img_h, img_w, colour_size=1, grayscale=True, batch_siz
     :param colour_size: Size of the dataset colour (1 by default)
     :param grayscale: Grayscale transformation (True by default)
     :param batch_size: Loader batch_size (5000 by default)
+    :param normal_path: Path to the .txt file with normal
+    :param rewrite:
     :return: [mean, std]
     """
+
+    # Try loading mean & std
+    if normal_path is None:
+        tmp_path = file_path.split('/')
+        normal_path = ('./data/' + tmp_path[-2] + '/mean_std.txt')
+
+    if os.path.isfile(normal_path) and not rewrite:
+        normal_lst = list()
+        for line in open(normal_path, 'r'):
+            normal_lst.append(float(line))
+        return normal_lst
 
     # Base Transformation
     if grayscale:
@@ -133,6 +147,8 @@ def get_normal(file_path, img_h, img_w, colour_size=1, grayscale=True, batch_siz
         mse_sum += ((image[0] - mean).pow(2)).sum()
     std = torch.sqrt((mse_sum / n_pixels) / colour_size)
 
+    with open(normal_path, 'w') as f:
+        f.write(f'{mean}\n{std}')
     return [mean, std]
 
 
